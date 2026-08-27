@@ -672,3 +672,6 @@ ghidra_scripts/db.env
 # a SCYLLAHIDE_DIR may still point at this path. Never track them: they are
 # third-party redistributables, not ours.
 /tools/scyllahide/
+
+# Rust bridge build output
+rust/ghidra-mcp-rs/target/
