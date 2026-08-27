@@ -1,0 +1,43 @@
+[package]
+name = "ghidra-mcp-rs"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Rust MCP bridge for GhidraMCP — a drop-in swap for the Python bridge, adding OAuth2 with PKCE and durable token storage."
+license = "Apache-2.0"
+
+[dependencies]
+# HTTP surface for the OAuth2 endpoints. axum is what the MCP streamable-http
+# transport also mounts on, so one router serves both.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "form", "tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tower-http = { version = "0.6", features = ["trace"] }
+
+# Outbound to the Ghidra Java server. rustls, NOT native-tls: no OpenSSL, no C.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# PKCE (RFC 7636) is SHA-256 + base64url. Both pure Rust.
+sha2 = "0.10"
+base64 = "0.22"
+
+# Token entropy. OS CSPRNG only — never a seeded/deterministic RNG.
+rand = "0.8"
+
+# Durable token storage. redb is a pure-Rust embedded KV; deliberately NOT
+# sqlite, which would drag a C dependency into a runtime this workspace keeps
+# C-free (see the tesseract-rs precedent: "zero C at runtime").
+redb = "2"
+
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Constant-time comparison for bearer tokens. The Java side already does a
+# timing-safe compare; the Rust side must not be the weak half.
+subtle = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }
