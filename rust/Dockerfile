@@ -10,7 +10,7 @@
 # be swappable.
 
 # ── builder ──────────────────────────────────────────────────────────────
-FROM rust:1.90-bookworm AS builder
+FROM rust:1.98.1-bookworm AS builder
 WORKDIR /src
 
 # Dependency layer first, so a source edit does not re-fetch the tree.

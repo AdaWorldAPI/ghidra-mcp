@@ -2,7 +2,7 @@
 name = "ghidra-mcp-rs"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.98.1"
 description = "Rust MCP bridge for GhidraMCP — a drop-in swap for the Python bridge, adding OAuth2 with PKCE and durable token storage."
 license = "Apache-2.0"
 
