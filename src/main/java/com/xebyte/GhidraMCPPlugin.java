@@ -185,7 +185,7 @@ class VersionInfo {
     category = PluginCategoryNames.COMMON,
     shortDescription = "GhidraMCP - HTTP server plugin",
     description = "GhidraMCP - Starts an embedded HTTP server to expose program data via REST API and MCP bridge. " +
-                  "Provides 177 endpoints for reverse engineering automation. " +
+                  "Provides 239 endpoints for reverse engineering automation. " +
                   "Port configurable via Tool Options. " +
                   "Features: function analysis, decompilation, symbol management, cross-references, label operations, " +
                   "high-performance batch data analysis, field-level structure analysis, advanced call graph analysis, " +
@@ -265,6 +265,11 @@ public class GhidraMCPPlugin extends Plugin implements ApplicationLevelPlugin {
     // Program provider for on-demand program access (FrontEnd mode)
     private final FrontEndProgramProvider programProvider;
 
+    // Threading strategy shared by every service AND the AnnotationScanner's
+    // dry-run wrapper, so a dry-run transaction and the write it wraps always
+    // nest on the same thread (see AnnotationScanner.createHandler).
+    private final com.xebyte.core.ThreadingStrategy threadingStrategy;
+
     // Server authenticator for programmatic login (bypasses GUI password dialog)
     private com.xebyte.core.GhidraMCPAuthenticator authenticator;
 
@@ -290,7 +295,7 @@ public class GhidraMCPPlugin extends Plugin implements ApplicationLevelPlugin {
 
         // Initialize service layer — FrontEnd mode: opens programs on-demand from project
         this.programProvider = new FrontEndProgramProvider(tool, this);
-        com.xebyte.core.ThreadingStrategy threadingStrategy = new com.xebyte.headless.DirectThreadingStrategy();
+        this.threadingStrategy = new com.xebyte.headless.DirectThreadingStrategy();
         this.listingService = new com.xebyte.core.ListingService(programProvider);
         this.commentService = new com.xebyte.core.CommentService(programProvider, threadingStrategy);
         this.symbolLabelService = new com.xebyte.core.SymbolLabelService(programProvider, threadingStrategy);
@@ -641,7 +646,7 @@ public class GhidraMCPPlugin extends Plugin implements ApplicationLevelPlugin {
         // Discovers @McpTool-annotated methods on service instances via reflection
         // ==========================================================================
 
-        AnnotationScanner scanner = new AnnotationScanner(programProvider,
+        AnnotationScanner scanner = new AnnotationScanner(programProvider, threadingStrategy,
             listingService, functionService, commentService, symbolLabelService,
             xrefCallGraphService, dataTypeService, analysisService,
             documentationHashService, malwareSecurityService, programScriptService,
@@ -926,7 +931,8 @@ public class GhidraMCPPlugin extends Plugin implements ApplicationLevelPlugin {
             Map<String, Object> params = parseJsonParams(exchange);
             String filePath = params.get("path") != null ? params.get("path").toString() : null;
             String comment = params.getOrDefault("comment", "Added via GhidraMCP").toString();
-            sendResponse(exchange, addToVersionControl(filePath, comment));
+            boolean keepCheckedOut = Boolean.parseBoolean(params.getOrDefault("keepCheckedOut", "false").toString());
+            sendResponse(exchange, addToVersionControl(filePath, comment, keepCheckedOut));
         }));
 
         // --- Version History & Checkouts (2 endpoints) ---
@@ -2775,25 +2781,23 @@ public class GhidraMCPPlugin extends Plugin implements ApplicationLevelPlugin {
      * 2. ANALYZE_DATA_REGION - Comprehensive single-call data analysis
      */
     private String analyzeDataRegion(String startAddressStr, int maxScanBytes,
-                                      boolean includeXrefMap, boolean includeAssemblyPatterns,
+                                      boolean includeXrefMap,
                                       boolean includeBoundaryDetection) {
-        return analysisService.analyzeDataRegion(startAddressStr, maxScanBytes, includeXrefMap, includeAssemblyPatterns, includeBoundaryDetection).toJson();
+        return analysisService.analyzeDataRegion(startAddressStr, maxScanBytes, includeXrefMap, includeBoundaryDetection).toJson();
     }
 
     /**
      * 3. DETECT_ARRAY_BOUNDS - Array/table size detection
      */
-    private String detectArrayBounds(String addressStr, boolean analyzeLoopBounds,
-                                      boolean analyzeIndexing, int maxScanRange) {
-        return analysisService.detectArrayBounds(addressStr, analyzeLoopBounds, analyzeIndexing, maxScanRange).toJson();
+    private String detectArrayBounds(String addressStr, int maxScanRange) {
+        return analysisService.detectArrayBounds(addressStr, maxScanRange).toJson();
     }
 
     /**
      * 4. GET_ASSEMBLY_CONTEXT - Assembly pattern analysis
      */
-    private String getAssemblyContext(Object xrefSourcesObj, int contextInstructions,
-                                      Object includePatternsObj) {
-        return xrefCallGraphService.getAssemblyContext(xrefSourcesObj, contextInstructions, includePatternsObj).toJson();
+    private String getAssemblyContext(Object xrefSourcesObj, int contextInstructions) {
+        return xrefCallGraphService.getAssemblyContext(xrefSourcesObj, contextInstructions).toJson();
     }
 
     /**
@@ -3683,7 +3687,18 @@ public class GhidraMCPPlugin extends Plugin implements ApplicationLevelPlugin {
         }
     }
 
-    private String addToVersionControl(String filePath, String comment) {
+    /**
+     * Add a file to version control.
+     *
+     * @param filePath       project path of the file to add
+     * @param comment        initial version comment
+     * @param keepCheckedOut keep the file checked out afterwards, so local edits
+     *                       can continue without a second checkout round-trip.
+     *                       This was advertised on /server/version_control/add
+     *                       but hardcoded to false here until v7.0.1.
+     * @return JSON result
+     */
+    private String addToVersionControl(String filePath, String comment, boolean keepCheckedOut) {
         Project project = tool.getProject();
         if (project == null) return "{\"error\": \"No project open\"}";
         if (filePath == null) return "{\"error\": \"'path' parameter required\"}";
@@ -3691,8 +3706,9 @@ public class GhidraMCPPlugin extends Plugin implements ApplicationLevelPlugin {
         if (file == null) return "{\"error\": \"File not found: " + escapeJson(filePath) + "\"}";
         if (file.isVersioned()) return "{\"error\": \"File already under version control: " + escapeJson(filePath) + "\"}";
         try {
-            file.addToVersionControl(comment, false, new ConsoleTaskMonitor());
-            return "{\"status\": \"added\", \"path\": \"" + escapeJson(filePath) + "\", \"comment\": \"" + escapeJson(comment) + "\"}";
+            file.addToVersionControl(comment, keepCheckedOut, new ConsoleTaskMonitor());
+            return "{\"status\": \"added\", \"path\": \"" + escapeJson(filePath) + "\", \"comment\": \"" + escapeJson(comment)
+                + "\", \"keep_checked_out\": " + keepCheckedOut + "}";
         } catch (Exception e) {
             return "{\"error\": \"Add to version control failed: " + escapeJson(e.getMessage()) + "\"}";
         }
