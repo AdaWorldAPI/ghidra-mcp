@@ -352,7 +352,7 @@ def test_scanner_actually_sees_the_suite():
         c[0] == "test_readonly_endpoints.py" for c in calls
     ), "the replayed read-only file was not scanned at all"
     assert any(
-        c[0] == "test_global_endpoints.py" and c[3] == "/list_functions"
+        c[0] == "test_global_endpoints.py" and c[3] == "/find_functions"
         for c in calls
     ), "the f-string URL form (http_session.get(f'{server_url}/...')) was missed"
 
@@ -401,7 +401,7 @@ def test_catalog_lookups_are_not_reported_as_breaches():
 @pytest.mark.parametrize(
     "path,method,alias,canonical",
     [
-        ("/get_function_labels", "GET", "address", "name"),
+        ("/analyze_function_completeness", "GET", "address", "function"),
         ("/rename_function", "POST", "function_address", "old_name"),
         ("/rename_symbol", "POST", "address", "target"),
     ],

@@ -3,6 +3,23 @@
 import logging
 import os
 
+from mcp.types import ToolAnnotations
+
+# ==========================================================================
+# MCP tool annotations
+# ==========================================================================
+# The hints clients act on. Claude Code derives read-only-ness solely from
+# readOnlyHint (absent ⇒ false) and, in plan mode, forces a permission prompt
+# for every MCP tool that is not read-only — a prompt no allow-rule can
+# suppress. It gates parallel execution on the same flag. Every statically
+# defined tool therefore declares one of these three.
+#
+# openWorldHint is left unset throughout: it would be false for nearly every
+# tool but not all of them, and no client gates behaviour on it.
+READ_ONLY_TOOL = ToolAnnotations(readOnlyHint=True, destructiveHint=False)
+WRITE_TOOL = ToolAnnotations(readOnlyHint=False, destructiveHint=False)
+DESTRUCTIVE_TOOL = ToolAnnotations(readOnlyHint=False, destructiveHint=True)
+
 # ==========================================================================
 # Request timeouts
 # ==========================================================================
@@ -27,7 +44,7 @@ ENDPOINT_TIMEOUTS = {
     # Ghidra's default decompile cap is 60s. The bridge must outlive it so the
     # plugin can return a structured timeout instead of writing into a closed
     # socket after the client has already gone away.
-    "decompile_function": 75,
+    "get_functions": 75,
     "set_function_prototype": 45,
     "rename_function": 45,
     "consolidate_duplicate_types": 60,
